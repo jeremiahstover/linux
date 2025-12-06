@@ -1,0 +1,13 @@
+sudo mkdir -p /etc/systemd/system/getty@.service.d
+
+cat > /etc/systemd/system/getty@.service.d/unlimited.conf << EOF
+[Service]
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=99
+CPUAffinity=0
+LimitRTPRIO=infinity
+RestrictRealtime=false
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart getty@tty2.service
