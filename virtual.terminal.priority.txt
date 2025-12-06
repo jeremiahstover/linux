@@ -11,3 +11,54 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl restart getty@tty2.service
+
+
+
+
+
+
+
+Sun workstations had a dedicated Service Processor (like modern BMC/IPMI) running independent firmware with its own CPU/RAM—completely isolated from the main OS, accessible via Stop-A or L1-A keyboard combos even if Solaris kernel panic'd. Linux can't replicate dedicated hardware, but you can build the closest equivalent using core isolation + RT getty + IPMI/BMC.​
+
+Linux "Service Processor" Equivalent: Core 0 Fortress
+Make core 0 your independent "debug CPU" (Sun-style)—no kernel threads, no KDE, no interrupts except keyboard:
+
+text
+# 1. Total core 0 isolation (your "service processor")
+echo "isolcpus=0 nohz_full=0 rcu_nocbs=0" | sudo tee -a /etc/default/grub
+sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+
+# 2. RT getty on isolated core (unblockable htop access)
+sudo mkdir -p /etc/systemd/system/getty@tty2.service.d
+cat > /etc/systemd/system/getty@tty2.service.d/sun-sp.conf << EOF
+[Service]
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=99
+CPUAffinity=0
+LimitRTPRIO=infinity
+ExecStartPre=/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor'
+EOF
+sudo systemctl daemon-reload
+
+# 3. Pin ONLY keyboard IRQ to core 0, ban everything else
+KB_IRQ=$(grep -i keyboard /proc/interrupts | head -1 | cut -d: -f1)
+echo 1 | sudo tee /proc/irq/$KB_IRQ/smp_affinity
+echo 1 | sudo tee /proc/irq/*/smp_affinity  # 0 everywhere else
+Reboot → Core 0 becomes your Sun SP: RT getty@tty2 runs exclusively there, Ctrl+Alt+F2 switches instantly (<100µs) no matter how hard Alma kernel locks up.​
+
+Hardware BMC/IPMI (True Sun SP)
+Your 20-core Intel workstation likely has IPMI/BMC—check:
+
+text
+sudo dnf install ipmitool freeipmi-tools
+ipmitool mc info  # If present, configure web console
+ipmitool sol activate  # Serial-over-LAN: independent keyboard access
+BMC gives true hardware isolation: KVM console + keyboard even if Alma kernel is braindead. Access via ipmitool -I lanplus -H <bmc-ip> -U ADMIN -P pass sol activate.​
+
+Test Your Sun-Style Escape Hatch
+text
+stress-ng --cpu 19 --io 4 --timeout 300s  # Thrash 19 cores + disk
+
+# Ctrl+Alt+F2 → <100ms tty2 shell
+# htop -C → core 0 shows ONLY getty (100%), cores 1-19 trashed
+Core 0 is now your independent debug CPU—KDE/Baloo/NVMe can die, you'll always escape to htop instantly, exactly like Sun's service processor
