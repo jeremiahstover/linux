@@ -1,25 +1,25 @@
 #!/sbin/openrc-run
 
-# Single reusable app identifier (change this one var for new apps)
-APP_NAME="ar3"
+# Single reusable app identifier (change this one var/line for new apps)
+APP_NAME="pl1"
 
-name="PHP built-in server - ${APP_NAME^}"
+name="PHP built-in server - ${APP_NAME}"
 
-# app-specific paths using APP_NAME (auto-capitalized)
-AR3_HOME="/home/${APP_NAME}"
-AR3_PUBLIC="${AR3_HOME}/Public"
-AR3_PID="/run/${APP_NAME}-server.pid"
-AR3_ACCESS_LOG="/var/log/${APP_NAME}-access.log"
-AR3_ERROR_LOG="/var/log/${APP_NAME}-error.log"
+# Paths (consistent lowercase)
+HOME_DIR="/home/${APP_NAME}"
+PUBLIC_DIR="${HOME_DIR}/Public"
+PID_FILE="/run/${APP_NAME}-server.pid"
+ACCESS_LOG="/var/log/${APP_NAME}-access.log"
+ERROR_LOG="/var/log/${APP_NAME}-error.log"
 
-command="/usr/bin/php83"
-command_args="-d error_log=${AR3_ERROR_LOG} -d log_errors=1 -d display_errors=0 -d error_reporting=E_ALL -d cli_server.log_requests=0 -S 0.0.0.0:8080 ${AR3_PUBLIC}/index.php -t ${AR3_PUBLIC}/"
+command="/usr/bin/php84"
+command_args="-d error_log=${ERROR_LOG} -d log_errors=1 -d display_errors=0 -d error_reporting=E_ALL -d cli_server.log_requests=0 -S 0.0.0.0:80 ${PUBLIC_DIR}/index.php -t ${PUBLIC_DIR}/"
 command_env="PHP_CLI_SERVER_WORKERS=0"
-pidfile="${AR3_PID}"
-directory="${AR3_HOME}"
+pidfile="${PID_FILE}"
+directory="${HOME_DIR}"
 
-output_log="${AR3_ACCESS_LOG}"
-error_log="${AR3_ERROR_LOG}"
+output_log="${ACCESS_LOG}"
+error_log="${ERROR_LOG}"
 
 depend() {
     need net
@@ -29,12 +29,10 @@ depend() {
 start_pre() {
     checkpath --directory --owner root:root --mode 0755 /var/log
 
-    # Access log (stdout)
     touch "${output_log}"
     chown root:root "${output_log}"
     chmod 0644 "${output_log}"
 
-    # Error log (stderr + PHP internal)
     touch "${error_log}"
     chown root:root "${error_log}"
     chmod 0644 "${error_log}"
