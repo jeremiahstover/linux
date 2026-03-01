@@ -1,0 +1,172 @@
+#!/bin/bash
+# kpx — query KeePassXC from the command line via Secret Service D-Bus
+#
+# Prerequisites:
+#   1. KeePassXC is running and database is unlocked
+#   2. KeePassXC Settings → Secret Service Integration → Enable
+#   3. Entries you want accessible must be in an exposed database/group
+#
+# Usage:
+#   kpx search <term>          Search entries by title
+#   kpx get <title>            Get password for entry by exact title
+#   kpx show <title>           Show all attributes (username, url, notes — NOT password)
+#   kpx user <title>           Get username for entry
+#   kpx totp <title>           Get TOTP code if configured
+#   kpx list                   List all available entries
+#
+# Security:
+#   - Never logs or prints passwords unless explicitly asked (kpx get)
+#   - Relies on KeePassXC being unlocked — you already authenticated
+#   - No master password in scripts, env vars, or session logs
+#   - D-Bus session scoped — only your user session can query
+
+set -euo pipefail
+
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+
+DB="/home/jeremiah/Documents/Passwords.kdbx"
+
+# --- Secret Service path (preferred) ---
+
+ss_available() {
+    dbus-send --session --print-reply \
+        --dest=org.freedesktop.secrets \
+        /org/freedesktop/secrets \
+        org.freedesktop.DBus.Properties.Get \
+        string:"org.freedesktop.Secret.Service" \
+        string:"Collections" 2>/dev/null | grep -q "freedesktop/secrets/collection" && \
+    # Check it's not just kdewallet — KeePassXC should expose its own collection
+    ! dbus-send --session --print-reply \
+        --dest=org.freedesktop.secrets \
+        /org/freedesktop/secrets \
+        org.freedesktop.DBus.Properties.Get \
+        string:"org.freedesktop.Secret.Service" \
+        string:"Collections" 2>/dev/null | grep -qx ".*kdewallet.*" 2>/dev/null
+}
+
+ss_search() {
+    local term="$1"
+    secret-tool search --all Title "$term" 2>/dev/null
+}
+
+ss_get_password() {
+    local title="$1"
+    secret-tool lookup Title "$title" 2>/dev/null
+}
+
+# --- keepassxc-cli path (fallback, needs password) ---
+
+cli_available() {
+    command -v keepassxc-cli &>/dev/null && [ -f "$DB" ]
+}
+
+cli_search() {
+    local term="$1"
+    echo "Master password required for keepassxc-cli fallback."
+    echo "For password-free access, enable Secret Service in KeePassXC settings."
+    echo ""
+    keepassxc-cli search "$DB" "$term"
+}
+
+cli_get_password() {
+    local title="$1"
+    keepassxc-cli show -s -a Password "$DB" "$title"
+}
+
+cli_show() {
+    local title="$1"
+    keepassxc-cli show "$DB" "$title" --show-protected 2>/dev/null | grep -v "^Password:"
+}
+
+cli_get_user() {
+    local title="$1"
+    keepassxc-cli show -s -a UserName "$DB" "$title"
+}
+
+cli_get_totp() {
+    local title="$1"
+    keepassxc-cli show -t "$DB" "$title"
+}
+
+cli_list() {
+    keepassxc-cli ls "$DB"
+}
+
+# --- Main ---
+
+CMD="${1:-help}"
+ARG="${2:-}"
+
+case "$CMD" in
+    search)
+        [ -z "$ARG" ] && echo "Usage: kpx search <term>" && exit 1
+        if ss_available; then
+            ss_search "$ARG"
+        elif cli_available; then
+            cli_search "$ARG"
+        else
+            echo "Error: Neither Secret Service nor keepassxc-cli available"
+            exit 1
+        fi
+        ;;
+    get)
+        [ -z "$ARG" ] && echo "Usage: kpx get <title>" && exit 1
+        if ss_available; then
+            ss_get_password "$ARG"
+        elif cli_available; then
+            cli_get_password "$ARG"
+        else
+            echo "Error: Neither Secret Service nor keepassxc-cli available"
+            exit 1
+        fi
+        ;;
+    show)
+        [ -z "$ARG" ] && echo "Usage: kpx show <title>" && exit 1
+        if cli_available; then
+            cli_show "$ARG"
+        else
+            echo "Error: keepassxc-cli not available"
+            exit 1
+        fi
+        ;;
+    user)
+        [ -z "$ARG" ] && echo "Usage: kpx user <title>" && exit 1
+        if cli_available; then
+            cli_get_user "$ARG"
+        else
+            echo "Error: keepassxc-cli not available"
+            exit 1
+        fi
+        ;;
+    totp)
+        [ -z "$ARG" ] && echo "Usage: kpx totp <title>" && exit 1
+        if cli_available; then
+            cli_get_totp "$ARG"
+        else
+            echo "Error: keepassxc-cli not available"
+            exit 1
+        fi
+        ;;
+    list)
+        if cli_available; then
+            cli_list
+        else
+            echo "Error: keepassxc-cli not available"
+            exit 1
+        fi
+        ;;
+    help|*)
+        echo "kpx — query KeePassXC via Secret Service or keepassxc-cli"
+        echo ""
+        echo "Commands:"
+        echo "  kpx search <term>    Search entries by title"
+        echo "  kpx get <title>      Get password (use carefully)"
+        echo "  kpx show <title>     Show entry details (no password)"
+        echo "  kpx user <title>     Get username"
+        echo "  kpx totp <title>     Get TOTP code"
+        echo "  kpx list             List all entries"
+        echo ""
+        echo "Requires KeePassXC running with database unlocked."
+        echo "Enable Secret Service in KeePassXC for password-free CLI access."
+        ;;
+esac
