@@ -1,5 +1,5 @@
 #!/bin/bash
-# mail-guard.sh — ensure mail services stay dead on Virtualmin boxes
+# mail-guard.sh - ensure mail services stay dead on Virtualmin boxes
 # Run via cron: @reboot /usr/local/bin/mail-guard.sh
 #               0 * * * * /usr/local/bin/mail-guard.sh
 #

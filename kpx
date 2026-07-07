@@ -1,5 +1,5 @@
 #!/bin/bash
-# kpx — query KeePassXC from the command line via Secret Service D-Bus
+# kpx - query KeePassXC from the command line via Secret Service D-Bus
 #
 # Prerequisites:
 #   1. KeePassXC is running and database is unlocked
@@ -9,16 +9,16 @@
 # Usage:
 #   kpx search <term>          Search entries by title
 #   kpx get <title>            Get password for entry by exact title
-#   kpx show <title>           Show all attributes (username, url, notes — NOT password)
+#   kpx show <title>           Show all attributes (username, url, notes - NOT password)
 #   kpx user <title>           Get username for entry
 #   kpx totp <title>           Get TOTP code if configured
 #   kpx list                   List all available entries
 #
 # Security:
 #   - Never logs or prints passwords unless explicitly asked (kpx get)
-#   - Relies on KeePassXC being unlocked — you already authenticated
+#   - Relies on KeePassXC being unlocked - you already authenticated
 #   - No master password in scripts, env vars, or session logs
-#   - D-Bus session scoped — only your user session can query
+#   - D-Bus session scoped - only your user session can query
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ ss_available() {
         org.freedesktop.DBus.Properties.Get \
         string:"org.freedesktop.Secret.Service" \
         string:"Collections" 2>/dev/null | grep -q "freedesktop/secrets/collection" && \
-    # Check it's not just kdewallet — KeePassXC should expose its own collection
+    # Check it's not just kdewallet - KeePassXC should expose its own collection
     ! dbus-send --session --print-reply \
         --dest=org.freedesktop.secrets \
         /org/freedesktop/secrets \
@@ -156,7 +156,7 @@ case "$CMD" in
         fi
         ;;
     help|*)
-        echo "kpx — query KeePassXC via Secret Service or keepassxc-cli"
+        echo "kpx - query KeePassXC via Secret Service or keepassxc-cli"
         echo ""
         echo "Commands:"
         echo "  kpx search <term>    Search entries by title"
